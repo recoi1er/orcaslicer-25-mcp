@@ -1,9 +1,8 @@
-cat << 'EOF' > install.sh
 #!/usr/bin/env zsh
 set -euo pipefail
 
 echo "=================================================================="
-echo " OrcaSlicer 2.5.0 Native MCP Bridge & Closed-Loop Installer"
+echo " OrcaSlicer 2.5.0 Native MCP Bridge & Closed-Loop Installer (v1.2.0)"
 echo "=================================================================="
 
 ORCA_SUPPORT_DIR="$HOME/Library/Application Support/OrcaSlicer"
@@ -73,14 +72,36 @@ for choice in selection.split(","):
         else:
             selected_paths.append(clients[choice][1])
 
-server_config = {
-    "command": uv_bin,
-    "args": ["run", "--no-config", "--managed-python", "--python", "3.13", server_script],
-    "env": {
-        "ORCA_BIN": "/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer",
-        "MOONRAKER_URL": "http://klipper-pi.local"
+# Optional Text-to-CAD prompt
+print("")
+install_cad = input("Would you like to also install & configure Text-to-CAD (cadgen) for complete design-to-print capability? (y/N): ").strip().lower()
+
+server_configs = {
+    "orcaslicer-25": {
+        "command": uv_bin,
+        "args": ["run", "--no-config", "--managed-python", "--python", "3.13", server_script],
+        "env": {
+            "ORCA_BIN": "/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer",
+            "MOONRAKER_URL": "http://klipper-pi.local"
+        }
     }
 }
+
+if install_cad == 'y':
+    server_configs["text-to-cad"] = {
+        "command": "/opt/homebrew/bin/uvx",
+        "args": [
+            "--no-config",
+            "--managed-python",
+            "--python",
+            "3.13",
+            "--from",
+            "cadgen==0.7.24",
+            "cadgen",
+            "mcp"
+        ]
+    }
+    print("   + Text-to-CAD (cadgen) queued for installation.")
 
 for path in selected_paths:
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -93,11 +114,12 @@ for path in selected_paths:
             data = {}
     
     mcp_servers = data.setdefault("mcpServers", {})
-    mcp_servers["orcaslicer-25"] = server_config
+    for server_name, config in server_configs.items():
+        mcp_servers[server_name] = config
     
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    print(f"✅ Successfully configured MCP server in: {path}")
+    print(f"✅ Successfully configured MCP server(s) in: {path}")
 
 EOF_PY
 
@@ -109,5 +131,3 @@ echo "   1. Open OrcaSlicer 2.5.0 -> File -> Plugins."
 echo "   2. Enable 'Remote API Bridge (Native 2.5.0 MCP)' and click Yes."
 echo "   3. Restart your AI client(s)."
 echo "=================================================================="
-EOF
-chmod +x install.sh
